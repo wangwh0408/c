@@ -14,17 +14,27 @@
     </el-col>
     <el-col :span="5" class="right-col">
       <div class="right-content">
-        <h3>右侧面板</h3>
-        <p>这里可以放置帮助信息、快捷操作或其他辅助内容</p>
+        <FileUpload
+          title="模型文件上传"
+          :initial-files="initialFiles"
+          @upload-success="handleUploadSuccess"
+          @upload-progress="handleUploadProgress"
+          @upload-error="handleUploadError"
+          @file-delete="handleFileDelete"
+          @file-change="handleFileChange"
+        />
       </div>
     </el-col>
   </el-row>
 </template>
 
 <script setup>
-import { watch } from 'vue';
+import { watch, ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { ElMessage } from 'element-plus';
 import LeftPanel from './LeftPanel.vue';
+import FileUpload from './FileUpload.vue';
+import uploadService from '@/api/uploadService';
 
 const props = defineProps({
   activeMenu: {
@@ -34,11 +44,58 @@ const props = defineProps({
 });
 
 const router = useRouter();
+const initialFiles = ref([]);
 
 const handleSubMenuChange = (path) => {
   if (path) {
     router.push(path);
   }
+};
+
+const loadInitialFiles = async () => {
+  try {
+    const files = await uploadService.getUploadedFiles();
+    initialFiles.value = files;
+  } catch (error) {
+    console.error('加载文件列表失败:', error);
+  }
+};
+
+const handleUploadSuccess = async ({ file, response }) => {
+  console.log('文件上传成功:', file.name, '响应:', response);
+  
+  try {
+    const businessResult = await uploadService.callBusinessApi(response);
+    console.log('业务接口调用成功:', businessResult);
+    ElMessage.success(`${file.name} 上传成功，业务接口已处理`);
+  } catch (error) {
+    console.error('业务接口调用失败:', error);
+    ElMessage.warning('文件上传成功，但业务接口调用失败');
+  }
+};
+
+const handleUploadProgress = ({ file, percent }) => {
+  console.log(`上传进度: ${file.name} - ${percent}%`);
+};
+
+const handleUploadError = ({ file, error }) => {
+  console.error('文件上传失败:', file.name, error);
+};
+
+const handleFileDelete = async ({ file, callback }) => {
+  try {
+    await uploadService.deleteFile(file);
+    if (callback) {
+      callback();
+    }
+  } catch (error) {
+    ElMessage.error('删除失败');
+    throw error;
+  }
+};
+
+const handleFileChange = ({ type, file }) => {
+  console.log(`文件变化: ${type} - ${file.name}`);
 };
 
 watch(() => props.activeMenu, (newVal) => {
@@ -48,6 +105,10 @@ watch(() => props.activeMenu, (newVal) => {
     router.push('/my-models');
   }
 }, { immediate: true });
+
+onMounted(() => {
+  loadInitialFiles();
+});
 </script>
 
 <style scoped>
@@ -84,16 +145,7 @@ watch(() => props.activeMenu, (newVal) => {
 .right-content {
   height: 100%;
   padding: 20px;
-}
-
-.right-content h3 {
-  margin-bottom: 15px;
-  color: #303133;
-}
-
-.right-content p {
-  color: #606266;
-  line-height: 1.6;
+  overflow-y: auto;
 }
 
 .fade-enter-active,
